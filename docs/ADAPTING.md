@@ -137,6 +137,14 @@ Analog Rytm MKII)"). What differs there:
 - The render events cover the audio interrupt's digital path: the sample
   voices, the delay and the reverb. The drum voices are analog and are not
   in it.
+- From 0.4, `core_audio_load` (a `uint32_t`, `analog-rytm-mk2/load.h`) is
+  the last audio block's time as a share of the block, in 256ths, timed by
+  core from its own `ev_render_in` (order 0) to its `ev_render_out` (order
+  100). Stock alone peaks near 84% while a pattern plays. Work a mod can
+  skip without changing the sound (an estimate, a meter) should stand aside
+  while it is high, so the audio and the UI keep their time; never thin the
+  sound itself for it. comp-preview stands aside above 95% and comes back
+  below 88%.
 - A SETTINGS row is listed after SYSTEM.
 - The key and encoder events are built as the Digitakt mk1's are, by
   constructors with the same fields, so the table's `ev` offsets hold
@@ -792,6 +800,90 @@ differs:
   a unit, a pattern sounded the same by ear with every field set.
 
 `examples/store-check-a4` is store-check-ar2 for the A4.
+
+### Parameter pages (core-ar2 0.4, Analog Rytm MKII)
+
+From core-ar2 0.4 core owns the entries of the four stock routines every
+parameter page goes through, and a mod adds a page, or changes how a stock
+parameter turns or reads, through two tables instead of hooking them
+itself. Before 0.4 each mod jumped from the first instructions of these
+routines, so two mods with pages could not be in one build. The routines
+(OS 1.74):
+
+| routine | entry | what it does |
+|---|---|---|
+| page_info(page) | 0x400ff5e0 | a page's entry: its name, then the ids on knobs A..H |
+| page_get_value(view, id, lock) | 0x40038462 | a knob's value, 8.8 |
+| param_apply_delta(view, id, delta, func) | 0x400378a6 | a turn: delta 8.8, func 1 while FUNC is held |
+| param_value_text(obj, id, value, buf) | 0x400a864c | the value's text |
+
+A mod contributes to `core_pages` (one entry per page of its own) and to
+`core_params` (one entry per range of ids it answers for, its own pages'
+or stock's), with `elekloader/sdk/include/analog-rytm-mk2/pages.h`:
+
+```json
+"contribute": [
+  {"to": "core_pages", "order": 14, "data": "00000000",
+   "relocs": [[0, "abs32", "sym:my_page", 0]]},
+  {"to": "core_params", "order": 50, "data": "00000000",
+   "relocs": [[0, "abs32", "sym:my_params", 0]]}
+]
+```
+
+```c
+#include "analog-rytm-mk2/pages.h"
+const struct core_page my_page = {14, "MY PAGE", {449, 450, 0, 0, 0, 0, 0, 0}};
+const struct core_param my_params = {449, 450, my_get, my_delta, my_text};
+```
+
+- `get(id, &value)` returns 1 with the value in 8.8, or 0 to pass.
+- `delta(view, id, delta, func)` returns 1 when it took the turn: core then
+  redraws the view, and stock neither applies the turn nor makes a lock.
+  0 passes.
+- `text(t)` gets param_value_text's own arguments as a `struct core_text`.
+  It returns 0 to pass, 1 when it wrote `t->buf`, or 2 to have stock format
+  `t->id` and `t->value`, which it may have changed (a page knob shown as a
+  stock parameter's text).
+
+Any of the three may be 0. Entries are asked in `order`; the first that
+answers wins, then stock. A page id must be one stock does not have
+(0..11) and no other mod in the build uses (rytm2_mods use 12 and 13, the
+AE ports 14 and 15). Core only passes calls on, so a build with no entries
+behaves as stock.
+
+**The page keys' lists.** A page key steps through its view's list of
+pages. Core builds each list: stock's pages first, in stock's order, then
+the pages mods add through `core_view_pages`, in `order` (ties by mod id),
+so the first press of a page key lands where it does on stock and several
+mods can add pages behind one key:
+
+```json
+{"to": "core_view_pages", "order": 30, "data": "00000000",
+ "relocs": [[0, "abs32", "sym:my_view_page", 0]]}
+```
+
+```c
+const struct core_view_page my_view_page = {CORE_VIEW_COMP, 14, 0};
+```
+
+The third field, `shown`, is 0 or `int32_t shown(void *view)`: the page key
+asks it on each press and steps over the page while it answers 0 (voice-dac
+hides DAC FILTER while DAC SUM is off). Core also does two things for every
+view, so no mod needs to: it puts the new page's title in the header after
+each step (stock showed the title of the page left), and a view keeps its
+page when it is shown again (stock sent the FX track's views back to their
+first page; the voice track's already kept theirs).
+
+The views are `CORE_VIEW_SRC`, `SAMPLE`, `FILTER`, `AMP`, `LFO` (a voice
+track's), `DELAY`, `REVERB`, `DIST`, `COMP` and `FX_LFO` (the FX track's).
+A page may be a stock one listed again (comp-preview lists page 11 a
+second time); a mod that does so tells its entry apart by the view's
+selected index (+0x8c) and list (+0x7c), not by "past the first entry",
+since other mods' pages can follow. Lower `order` sits closer to stock's
+pages; rytm2_mods and the AE ports use 20 for a key's first added page and
+30 after it. A view holds 16 pages at most. Deeper hooks inside these routines (a mod that rewrites
+one value's text further in) still work: core resumes each routine where
+its own jump ends.
 
 ### The Mod Menu (core-dn1 2.2, Digitone mk1)
 

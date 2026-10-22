@@ -1,10 +1,10 @@
 # core-ar2
 
-The boot copier, the hook bus and mod storage for the Analog Rytm MKII. From
+The boot copier, the hook bus, mod storage and parameter pages for the Analog Rytm MKII. From
 0.3 it is for OS 1.74 only; 0.2 is the last core with 1.73 (below). It builds the Digitakt mk1's `core.s`, `settings.s` and
 `render.s` with the Rytm's addresses, which `mod.json` gives (`defsym`,
 `sites`), and from 0.2 its own `store.c` and `store.s` (Mod storage, below),
-from 0.3 with `route.s`. On its own it changes nothing the unit does.
+from 0.3 with `route.s`, from 0.4 with `pages.s` (Parameter pages, below). On its own it changes nothing the unit does.
 
 The Rytm runs on the Digitakt mk1's platform (a ColdFire MCF5441x), and its OS
 entry, bootstrap loader and UI loop are the Digitakt's, so each site below is
@@ -171,6 +171,83 @@ What it does not do:
   pattern received as a SysEx dump does. A target project saved with another
   mod layout keeps its store as it is.
 
+## Parameter pages (0.4)
+
+`pages.s` takes the first instructions of the four routines every parameter
+page goes through and hands each call to the mods' entries in `core_pages`
+and `core_params` before stock (docs/ADAPTING.md, "Parameter pages (core-ar2
+0.4, Analog Rytm MKII)"; the SDK header is `analog-rytm-mk2/pages.h`). Each
+stub runs the instructions its jump displaced and resumes after them, so
+deeper hooks in these routines (filter-hz's text, ctrl-all's turn) are
+untouched:
+
+| routine | site (1.74) | displaced | resumes |
+|---|---|---|---|
+| page_info | 0x400ff5e0 | `moveq #11,%d1; movel %sp@(4),%d0` | 0x400ff5e6 |
+| page_get_value | 0x40038462 | `lea %sp@(-12),%sp; moveml %d2-%d3/%a2,%sp@` | 0x4003846a |
+| param_apply_delta | 0x400378a6 | the same | 0x400378ae |
+| param_value_text | 0x400a864c | `lea %sp@(-20),%sp; moveml %d2-%d4/%a2-%a3,%sp@` | 0x400a8654 |
+
+A turn a mod takes is followed by core's call to the view's redraw
+(0x40078580), so the mod's own value shows at once.
+
+The page keys' lists: each view's constructor passes its list to a setter
+(0x401a1e46) with `moveq #n,%d1; movel %d1,%sp@-; movel #list,%d0`, ten
+times in one routine. Core takes those three instructions per view and
+passes a list of its own instead (`view_list`): stock's pages, then the
+`core_view_pages` entries for that view, in order. The view keeps a copy
+as a vector at +0x7c, the selected index at +0x8c.
+
+The page key's step (`core_cycle`, at 0x4003ab86 over the index's
+`remsl`, its store and the invalidate) skips a page whose entry's `shown`
+answers 0, then pushes the new page's title to the header as stock's
+page_view_activate does. The view is told by its copy of the list: the
+first of core's ten lists with the same pages. The FX track's page code
+asked a view shown again to go back to its first page (0x400cbd3e, a
+`beqs` around that call); core makes it a `bras`, so FX views keep their
+page as the voice track's do. Both were mods' hooks before (voice-dac's
+cycle, lfo-rnd's title, comp-preview's set-page slot).
+
+| view | site (1.74) | stock pages |
+|---|---|---|
+| SRC | 0x400caf04 | 0 |
+| SAMPLE | 0x400caf7e | 4, 5 |
+| FILTER | 0x400cafee | 6 |
+| AMP | 0x400cb040 | 7 |
+| LFO | 0x400cb096 | 3 |
+| DELAY | 0x400cb0e8 | 8 |
+| REVERB | 0x400cb144 | 9 |
+| DIST | 0x400cb196 | 10 |
+| COMP | 0x400cb1ee | 11 |
+| FX LFO | 0x400cb25a | 3 |
+
+**Breaking change.** Mods built for 0.3 that jumped from these entries
+themselves (rytm2_mods v1.2's lfo-rnd, voice-dac, euclid-accents,
+velocity-humanise), or that patch a page key's list (also comp-preview
+1.0), overlap core's sites and are refused at link; their 0.4 versions
+contribute entries instead. Mods that hook the page key's step or the COMP
+view's set-page slot themselves (lfo-rnd 1.2's and voice-dac 1.3's first
+builds, comp-preview 1.1's) overlap them too. `core_view_pages` entries have three fields, so a mod built with the
+two-field entry of the first 0.4 test builds must be rebuilt.
+
+## The audio load (0.4)
+
+`load.s` subscribes core to its own `ev_render_in` (order 0) and
+`ev_render_out` (order 100) and reads DMA timer 0's counter at each:
+`core_audio_load` is the last block's time as a share of the block, in
+256ths (`analog-rytm-mk2/load.h`). Mods with work that does not change the
+sound skip it while the load is high (comp-preview's estimate, above 95%).
+On a unit (cpu-probe, 21 Oct 2026, a pattern playing): stock with core alone
+averaged 78-80% of the time in the interrupt and peaked at 82-84%; all
+eleven rytm2_mods mods and duck added 1 to 2 points; fx-sends' chorus about
+5; comp-preview's estimate 4 to 5; with voice-dac's DAC SUM on as well, the
+peak reached 95%, with no audible artefacts. The 100% that cpu-probe's CPU
+reading touches in that case is the whole processor, the interface's tasks
+included: they get less idle time, not less than they need (the knobs keep
+responding). With the guard the readings were 92% and a 94% peak, within a
+point of the build without it, so at these loads it rarely engages: it is a
+ceiling for heavier builds, not a fix for anything heard.
+
 ## Checked so far
 
 On a unit (OS 1.73). With test images built by rytm-mods-src (its `elemod`
@@ -252,10 +329,38 @@ stock bytes, and that each covers whole instructions.
   lockfile built with 0.3 read the 0.2 project's sound fields in place
   (checked on 1.73 only, with that 1.73 build).
 
+- **Parameter pages (0.4)**, in an emulator (OS 1.74, 21 Oct 2026): with
+  rytm2_mods' 0.4 versions, every page screen of the same key and knob
+  sequences was pixel-identical to the v1.2 release build on core 0.3
+  (LFO RND, FUNC + VEL, euclid OP, DAC FILTER with filter-hz's Hz text);
+  comp-preview 1.1's COMP and preview screens matched 1.0's; with duck
+  added, COMP cycled COMP, preview, DUCK.
+
+- **Parameter pages (0.4) on a unit** (21 Oct 2026), sent with Transfer
+  over USB: with all eleven rytm2_mods mods (Q4A4), LFO RND, DAC FILTER
+  (shown only with DAC SUM on), euclid OP, FUNC + VEL, the COMP preview
+  and the keys no mod uses all behaved as on core 0.3, and the VELOCITY
+  MOD menu kept the mods' values. With duck and cpu-probe added (Q4D4),
+  COMP cycled COMP, preview, DUCK, DUCK ducked from its source and stayed
+  shown on leaving the FX track. fx-sends' CHORUS SEND page (Q4F4, without
+  lfo-rnd) opened behind AMP and its chorus played on its track only.
+
+- **Page key's step and audio load (0.4) on a unit** (21 Oct 2026): the
+  same three builds plus core, voice-dac and duck alone. FILTER stayed on
+  FILTER with DAC SUM off and stepped FILTER, DAC FILTER, FILTER with it on;
+  LFO stepped LFO, LFO RND, LFO; the header named each page after the step,
+  also in the builds without lfo-rnd; COMP, the preview and DUCK were each
+  kept on coming back to the FX track, with and without comp-preview.
+  `core_audio_load`: readings with cpu-probe matched the builds before it.
+  In the busiest case (DAC SUM, fx-sends' chorus and the preview) CPU still
+  read 100% at times, with the audio interrupt at 92% and peaking at 94%;
+  the preview's trace stopped now and then and came back by itself, knobs
+  and values kept responding meanwhile, and nothing was audible.
+
 ## Building
 
-Core 0.3 builds with `Analog-Rytm_MKII_OS1.74.syx` only: the SDK writes
-`core-0.3.elemod` (1.74 is its `os`) and, for hello-marker-ar2 (whose `os`
+Core 0.4 builds with `Analog-Rytm_MKII_OS1.74.syx` only: the SDK writes
+`core-0.4.elemod` (1.74 is its `os`) and, for hello-marker-ar2 (whose `os`
 is 1.73, with a 1.74 port), `hello-marker-1.0-os1.74.elemod`. For 1.73,
 build core 0.2 from commit 92a99c9 (OS versions, above).
 
@@ -264,8 +369,8 @@ build core 0.2 from commit 92a99c9 (OS versions, above).
 python -m elekloader.sdk.build mods/core-ar2 --stock Analog-Rytm_MKII_OS1.74.syx
 python -m elekloader.sdk.build examples/hello-marker-ar2 --stock Analog-Rytm_MKII_OS1.74.syx
 python -m elekloader.lint examples/hello-marker-ar2/out/hello-marker-1.0-os1.74.elemod \
-    --stock Analog-Rytm_MKII_OS1.74.syx --with mods/core-ar2/out/core-0.3.elemod
+    --stock Analog-Rytm_MKII_OS1.74.syx --with mods/core-ar2/out/core-0.4.elemod
 python -m elekloader.patch --stock Analog-Rytm_MKII_OS1.74.syx \
-    --mod mods/core-ar2/out/core-0.3.elemod --mod examples/hello-marker-ar2/out/hello-marker-1.0-os1.74.elemod \
+    --mod mods/core-ar2/out/core-0.4.elemod --mod examples/hello-marker-ar2/out/hello-marker-1.0-os1.74.elemod \
     --out rytm-hello.syx --version HM74
 ```
