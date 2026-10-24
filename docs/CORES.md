@@ -176,7 +176,9 @@ core.
   places for USB functions, mods of their own that combine:
   [mods/usb-midi-ot](../mods/usb-midi-ot) (USB MIDI, with 0.4) is the first,
   and [mods/usb-audio-ot](../mods/usb-audio-ot) (USB audio out, with 0.4, in
-  five layouts) the second.
+  five layouts) the second. [mods/settings-ot](../mods/settings-ot)
+  (settings, with 0.6) puts every mod's settings in a MODS category of the
+  MAIN MENU and keeps them on the card or with the project.
 - **Model:Cycles, Model:Samples** ([mods/core-mc](../mods/core-mc),
   [mods/core-ms](../mods/core-ms)): the shared core.s with the hook bus's
   tick, draw, key and encoder events. Their OS entry makes its SRAM copy and
