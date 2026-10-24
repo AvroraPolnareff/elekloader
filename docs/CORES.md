@@ -181,6 +181,9 @@ core.
   five layouts) the second. [mods/settings-ot](../mods/settings-ot)
   (settings, with 0.6) puts every mod's settings in a MODS category of the
   MAIN MENU and keeps them on the card or with the project.
+  [mods/seq-events-ot](../mods/seq-events-ot) offers its step fire as the
+  same events as the Digitone's and the Digitakt's, for mods that change what
+  the sequencer plays.
 - **Model:Cycles, Model:Samples** ([mods/core-mc](../mods/core-mc),
   [mods/core-ms](../mods/core-ms)): the shared core.s with the hook bus's
   tick, draw, key and encoder events. Their OS entry makes its SRAM copy and
