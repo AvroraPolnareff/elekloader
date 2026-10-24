@@ -159,8 +159,10 @@ the A4's sites: the same events, `ev_project` and mod storage ("Mod storage
 Digitakt mk1. On the A4, the SETTINGS menu is the GLOBAL key's, and its rows
 come after SYSTEM; the render events cover the audio interrupt's digital
 path (the effects and the inputs), since the voices are analog. core-a4
-exports no firmware locations either. `examples/hello-marker-a4`,
-`hooks-check-a4`, `store-check-a4` and `ddr-canary-a4` are mods for it.
+exports no firmware locations either. From 0.2 it has core-ar2 0.4's
+parameter routines and `core_audio_load` ("Parameter pages (core-a4 0.2,
+Analog Four MKII)"). `examples/hello-marker-a4`, `hooks-check-a4`,
+`store-check-a4`, `ddr-canary-a4` and `pages-check-a4` are mods for it.
 
 The sites core owns (do not patch them):
 - Digitakt mk1 1.53 and 1.54: 0x40000538, 0x4000a770, 0x4000a7d6,
@@ -185,7 +187,10 @@ The sites core owns (do not patch them):
   more (32 in all; listed under "Mod storage");
 - Analog Four MKII 1.56: 0x40001180, 0x40098898, 0x40098900, 0x400999f8,
   0x40099a40, 0x400d05d2, 0x401013c6, 0x401040f6, and 28 more for mod
-  storage (mods/core-a4/README.md lists them).
+  storage (mods/core-a4/README.md lists them); from core-a4 0.2, 0x400f6212,
+  0x40023d54, 0x400232e2 and 0x4009ea68 (the page routines), 0x400c2370
+  and 0x400c4202 (the views), and the bytes at 0x400add22, 0x400add28,
+  0x4000a758, 0x4000a774 and 0x4000a790 (the current view's range).
 
 A firmware routine your mod calls has its own address on each device and
 each OS version: look it up for the release you target, and build one
@@ -910,6 +915,54 @@ pages; rytm2_mods and the AE ports use 20 for a key's first added page and
 30 after it. A view holds 16 pages at most. Deeper hooks inside these routines (a mod that rewrites
 one value's text further in) still work: core resumes each routine where
 its own jump ends.
+
+### Parameter pages (core-a4 0.2, Analog Four MKII)
+
+core-a4 0.2 has core-ar2 0.4's `core_pages` and `core_params` at the A4's
+four routines, with the same calls and answers as above, and core-ar2's
+`core_audio_load`. With `elekloader/sdk/include/analog-four-mk2/pages.h`
+(and `load.h`):
+
+| routine | entry (OS 1.56) |
+|---|---|
+| page_info(page) | 0x400f6212 |
+| page_get_value(view, id, lock) | 0x40023d54 |
+| param_apply_delta(view, id, delta, func) | 0x400232e2 |
+| param_value_text(obj, id, value, buf) | 0x4009ea68 |
+
+What differs from the Rytm:
+- A page's entry has ten knobs, A..J: `struct core_page` is
+  `{page, name, ids[10]}`. Stock's pages are 0..47, so a mod's own page id
+  is 48 or more.
+- `core_view_pages` is the A4's own. Each A4 page is a view of its own (29
+  of them, indices 0..28, made by the main screen's constructor), and a
+  page key steps through a list of views for each track type. An entry is
+  `{type, key, page, shown}`: core makes a view for the page (a mod's own
+  from `core_pages`, or a stock one), gives it the next index from 29, and
+  appends it to that key's list for that track type, after stock's views
+  and in `order`:
+
+  ```c
+  const struct core_view_page my_view_page = {CORE_TRACK_SYNTH, CORE_KEY_AMP, 50, 0};
+  ```
+
+  The types are `CORE_TRACK_ALL` (MIX, PERF, ARP and NOTE), `SYNTH`, `FX`
+  and `CV`; the keys `CORE_KEY_PERF`, `ARP`, `NOTE`, `OSC1`, `OSC2` (not on
+  the FX track), `FILTERS`, `AMP`, `ENV`, `LFO` and `MIX`. `shown` works as
+  on the Rytm. A build holds 16 such views.
+- The current view is saved with the project, one index for each track
+  type. Core widens the range stock accepts for it, 0..28, to 0..44, so a
+  mod's view comes back after a power cycle or a project load; a project
+  saved on a view the build lacks opens on MIXER, stock's fallback for an
+  index with no view (stock alone opens it on PERFORMANCE).
+- Stock already keeps each track type's page when its view is shown again,
+  and shows each view's own title, so there is nothing to fix there.
+- A stock page's entry can be answered too (a `core_pages` entry with a
+  stock id), to retitle a page a mod's view follows.
+
+`examples/pages-check-a4` is the smallest mod on it: AMP PAN's value as two
+hex digits through `core_params`, and a CHECK page behind the AMP key. It
+was checked in rytm-emu's A4 build and on a unit (23 Oct 2026).
 
 ### Machines (core-ar2 0.5, Analog Rytm MKII)
 
