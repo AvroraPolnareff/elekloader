@@ -8,7 +8,7 @@ volatile uint32_t fw_slot_ids[79];
 uint32_t core_param_name_call(uint32_t fn, int32_t id, int32_t field)
 { return (uint32_t)(uintptr_t)((const char *(*)(int32_t, int32_t))(uintptr_t)fn)(id, field); }
 static int32_t active = 1, previous = 0, stuck, calls;
-static const char *legacy_name(int32_t id, int32_t field)
+static const char *override_name(int32_t id, int32_t field)
 { return id == 16 && field == CORE_PARAM_SHORT ? "ATK" : 0; }
 static const char *other_name(int32_t id, int32_t field)
 { return id == 16 && field == CORE_PARAM_LONG ? "Attack" : 0; }
@@ -22,11 +22,11 @@ static int32_t text(int32_t id, int32_t value, char out[CORE_PARAM_TEXT])
 }
 static int32_t should_not_run(int32_t id, int32_t v, char out[CORE_PARAM_TEXT])
 { (void)id; (void)v; (void)out; assert(0); return 0; }
-static const struct core_param_override legacy = {0, legacy_name}, other = {0, other_name};
+static const struct core_param_override name_provider = {0, override_name}, other = {0, other_name};
 static const struct core_param_presenter unknown = {0, should_not_run, 0};
 static const struct core_param_presenter first = {&core_param_present_v1, 0, abstain};
 static const struct core_param_presenter second = {&core_param_present_v1, text, visible};
-const struct core_param_override *const core_param_override[] = {&legacy, &other, 0};
+const struct core_param_override *const core_param_override[] = {&name_provider, &other, 0};
 const struct core_param_presenter *const core_param_presenters[] = {&unknown, &first, &second, 0};
 static uint32_t ptr(const void *p) { assert((uintptr_t)p <= UINT32_MAX); return (uintptr_t)p; }
 static int32_t get(uint32_t owner, int32_t id) { (void)owner; assert(id == 52 || id == 61); return previous; }
@@ -53,5 +53,5 @@ int main(void)
     assert(core_param_lfo_step(ptr(&owner), 61, 18 * 256, -256) == previous);
     active = 0; int32_t before = calls;
     assert(core_param_lfo_step(ptr(&owner), 52, 18 * 256, 256) == 18 * 256 && calls == before);
-    puts("PASS core presentation without machines: legacy ABI, independent providers, marker refusal, formatter termination, vector IDs/capacity and relative edits");
+    puts("PASS core presentation without machines: 8-byte override ABI, independent providers, marker refusal, formatter termination, vector IDs/capacity and relative edits");
 }

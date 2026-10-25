@@ -57,7 +57,7 @@
 
 | 4.2, OS1.44: core_sound_set also notifies persistent SoundRef.
 | core_step_selection(two_words) and core_lock_selected(track,slot,value).
-| Names use legacy core_param_override; optional format/visibility providers
+| Names use core_param_override; optional format/visibility providers
 | contribute 12-byte {&core_param_present_v1,format,visible} to core_param_presenters.
 | fw_view_param_value(view,param_id,locked_byte) reads a native parameter view.
 | locked_byte must be non-null. UI task; normal gcc integer ABI. See core3.h.

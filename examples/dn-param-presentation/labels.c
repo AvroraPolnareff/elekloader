@@ -23,5 +23,5 @@ static int32_t visible(int32_t id)
 { return id == (int32_t)fw_slot_ids[66] ? 1 : -1; }
 const struct core_param_override labels = {0, name};
 const struct core_param_presenter presentation = {&core_param_present_v1, format, visible};
-typedef char legacy_abi[(sizeof(struct core_param_override) == 8) ? 1 : -1];
+typedef char override_abi[(sizeof(struct core_param_override) == 8) ? 1 : -1];
 typedef char presenter_abi[(sizeof(struct core_param_presenter) == 12) ? 1 : -1];

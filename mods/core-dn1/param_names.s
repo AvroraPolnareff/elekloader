@@ -2,7 +2,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
         .section .run,"ax"
         .balign 4,0
-/* Adapt the legacy name callback's D0 pointer result to an integer C call. */
+/* Adapt the existing name callback's D0 pointer result to an integer C call. */
         .globl core_param_name_call
 core_param_name_call:
         movea.l 4(%sp),%a0

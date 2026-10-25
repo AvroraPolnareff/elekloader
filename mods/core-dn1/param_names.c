@@ -5,7 +5,7 @@ extern const struct core_param_override *const core_param_override[];
 extern const struct core_param_presenter *const core_param_presenters[];
 const uint32_t core_param_present_v1 = 1;
 static char value_text[CORE_PARAM_TEXT];
-/* Legacy core_param_override callbacks return pointer bits in D0, as
+/* Existing core_param_override callbacks return pointer bits in D0, as
  * core_param_short consumes them. GCC pointer calls would instead read A0. */
 extern uint32_t core_param_name_call(uint32_t callback, int32_t id, int32_t field);
 
