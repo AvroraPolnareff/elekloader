@@ -1891,7 +1891,8 @@ machine is its slot 0, which no stock parameter uses: the machine's id << 8,
 0 for FM. The voice loads it with the rest of the sound at each note.
 MACHINES in the Mod Menu opens a submenu of FM and the machines in the
 build; picking one sets the held track's sound slot 0 (with
-`core_sound_set`) and its SYN knobs to the machine's defaults, or to FM's
+`core_sound_set`, or persistent `dnm_sound_edit` on OS 1.44) and its SYN
+knobs to the machine's defaults, or to FM's
 for FM. On a machine track the SYN1 and SYN2 knobs are the machine's
 (`core_param_override`): its labels and value texts, on plain knobs that
 turn as the stock ones do. SYN1's and SYN2's second pages are FM's alone and
@@ -1951,8 +1952,60 @@ no firmware address, so its 1.44 port is empty:
 "resources": {"names": ["dnmachine:2"], "core": "3.1"}
 ```
 
-The machines mod claims sound slot 0 as the resource `soundslot:0`; what it
-does not do yet is in its README.
+With machines 0.3 on **OS 1.44**, the companion requires core-dn1 4.2.
+It supplies processed pitch (including native portamento/transpose), uses
+machine names/value formatters in notifications and LFO DEST, and handles
+unused knobs and FUNC+turn defaults with native GRID/STEP selections through
+step 64. Existing machine/knob descriptor layouts remain unchanged.
+
+A persistent UI change uses `dnm_sound_edit(track, slot, value)`, a wrapper
+for `core_sound_set` above. `dnm_knob_value` maps a physical knob to its native SYN view and parameter
+ID, then calls `fw_view_param_value`. FUNC+turn applies the machine default
+in the companion, using `core_lock_selected` for held steps or
+`core_sound_set` for the base. Machine ownership/default policy stays there. Do not use persistent edits for temporary sequencer modulation.
+
+A machine may contribute a pointer to `struct dnm_page` to `dn_machine_pages`
+for native SYN content replacement. Its `abi` is `&dnm_ui_v1`, `id` identifies
+a registered machine, `pages[2]` sets SYN1/2 counts (0 native, 1 or 2 existing
+subpages), and `draw(view, bitmap, syn, page)` returns nonzero when it draws
+the content. The callback runs at the native page position before menus and
+notifications. A zero result retains native drawing. Machines without a
+descriptor keep native navigation; FM restores its page count/cursor.
+
+`dnm_knob_value(knob, &locked)` returns the active track's base value or its
+native GRID/STEP display value and lock flag. Before its SYN view has first
+been drawn, it returns the kit base value with no lock flag. `dnm_syn_page(brain)` answers the
+visible SYN1/2 or 0; `dnm_syn_view(syn)` returns its last native view. These
+functions are UI-task calls. Knob indices keep the same physical 0-31 mapping
+as `dnm_knob`; the five empty positions return 0 with `locked = 0`. The
+companion handles FUNC+turn defaults and consumes unused controls on both
+subpages. Page counts affect navigation only: `DNM_PAGES2` determines whether
+a machine owns second-page parameters.
+
+For full labels, contribute a pointer to `struct dnm_names` to
+`dn_machine_names`: `abi = &dnm_names_v1`, the registered machine `id`,
+`count = DNM_KNOBS` or `DNM_KNOBS_ALL`, and `long_names` pointing to that many
+string pointers. Null or empty entries, absent metadata, invalid counts,
+and indices beyond `count` fall back to the short `dnm_knob.name`.
+Notifications and the LFO list use full names; compact knobs and current
+DEST use short names. Unused controls (null/empty short names), unowned
+second-page controls and extra FM operator destinations are hidden in the
+list and skipped on relative DEST turns. Target IDs and saved assignments
+are unchanged, including old assignments to a hidden control.
+
+Descriptors and strings must stay valid for the firmware's lifetime, with
+one descriptor of each kind per machine id. Use designated initializers.
+The machine/knob/voice layouts are unchanged (28/12/20 bytes on ColdFire);
+the optional page/names layouts are 20/16 bytes. Each extension references
+its own marker, so names alone do not require a page descriptor. A formatter
+must terminate its text within the native 16-byte buffer.
+`examples/dn-native-machine` shows both extensions with `DNM_PAGES2`;
+`examples/dn-sine-machine` remains portable without them.
+
+The `dnm_ui_v1` reference refuses a new page built with an older companion or
+on an OS whose native UI is not implemented. OS 1.43 retains its existing
+machine support, without these native integrations. The machines mod claims
+sound slot 0 as `soundslot:0`; CPU limits remain in its README.
 
 ### Exclusive audio (core-dn1 3.2, Digitone mk1)
 

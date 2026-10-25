@@ -55,20 +55,23 @@ with the ColdFire tools. Keep the `.elemod` files out of the repository.
 
 ```sh
 python tests/test_core_dn1_sound.py
+python tests/test_machines_dn1.py
 ```
 
-Three independent fixtures compile the actual Sound, selection and
-presentation implementations without machines. They cover persistent
-notifications/bounds, both selection words and partial lock-write failure/retry,
-SHORT-only callbacks/versioned providers, callback order and native fallbacks. Linux
-low-address non-PIE objects model native32-bit pointers; other platforms skip.
+The core fixtures compile actual Sound, selection and presentation code without machines.
+They check notifications/bounds, both selection words, partial lock-write failure/retry,
+SHORT-only callbacks, versioned providers, priority and width fallbacks.
+The companion fixture checks native pages, labels, PAGES2 ownership,
+native getter/byte flag adaptation, reset refusal and processed pitches.
+Linux low-address non-PIE objects model native32-bit pointers; other platforms skip.
 Host fixtures do not establish ColdFire ABI, device timing or storage.
 
-With explicit OS1.43/1.44 stocks and `ELEKLOADER_CORE_DN1_411`, the SDK checks
-old offsets/ABI, exact1.43 payload and the single changed1.44 setter JSR
-operand, plus the optional presenter table,16B text buffer and8 shared hooks.
-The core-only parameter presentation example links without machines and
-is refused by an older core. No firmware/baseline binaries are committed.
+The SDK suite accepts `ELEKLOADER_CORE_DN1_411`, the unpatched core 4.1.1
+baseline built from main, with `-os1.44.elemod` beside it. Along with explicit
+`ELEKLOADER_DN_SYX` and `ELEKLOADER_DN_SYX_144` stock files it checks unchanged old symbols/offsets and the exact1.43 payload. On1.44
+it checks the setter JSR change, existing short-name hook retarget, eight
+additional hooks, presenter table and16B text buffer.
+No baseline binaries are committed. Native extensions are OS 1.44 only.
 
 ## The refusal fixtures
 

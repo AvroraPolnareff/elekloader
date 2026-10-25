@@ -1074,9 +1074,9 @@ def test_digitone_program_change_example():
 
 def test_digitone_machines_build_and_link():
     """The machines mod (mods/machines-dn1) and its example machine
-    (examples/dn-sine-machine), in C on core-dn1 3.1's names: they patch no
-    site, need 3.1, carry the same code for 1.43 and 1.44 (empty ports), link
-    with core-dn1 3.2, and are refused beside 2.3."""
+    (examples/dn-sine-machine) retain their descriptor ABI and core 3.1
+    requirement. Native UI sites are owned only on 1.44; SINE's portable
+    machine code still matches between OS versions."""
     if not DN_STOCK or not os.path.exists(DN_STOCK):
         raise Skip('missing ELEKLOADER_DN_SYX')
     tc = [x for x in devices.devices() if x.key == 'digitone-mk1'][0].toolchain
@@ -1087,7 +1087,9 @@ def test_digitone_machines_build_and_link():
         mpath, m = build.build(os.path.join(ROOT, 'mods', 'machines-dn1'), DN_STOCK, tmp)
         spath, sm = build.build(os.path.join(ROOT, 'examples', 'dn-sine-machine'), DN_STOCK, tmp)
         assert os.path.basename(mpath) == 'machines-%s.elemod' % MACH_VERSION
-        assert m.needs_core == '3.1' and sm.needs_core == '3.1' and not m.sites and not sm.sites
+        assert m.needs_core == ('4.2' if formats.load(DN_STOCK)[2].version == '1.44' else '3.1')
+        assert len(m.sites) == (10 if formats.load(DN_STOCK)[2].version == '1.44' else 0)
+        assert sm.needs_core == '3.1' and not sm.sites
         assert {'core_sound_set', 'core_param_ui_make', 'core_menu_open', 'fw_params',
                 'fw_active_track'} <= set(m.imports)
         assert {'dnm_knob', 'dnm_phase_inc', 'dnm_sin'} <= set(m.exports)
@@ -1106,7 +1108,100 @@ def test_digitone_machines_build_and_link():
                     s, dev, _rel = formats.load(st)
                     images.append(bytes(elemod.parts_bytes(x.sections['.run']['parts'],
                                                            formats.main_image(s, dev), dev)))
-                assert images[0] == images[1] and mod.relocs == mod4.relocs, src
+                if src == 'examples/dn-sine-machine':
+                    assert images[0] == images[1] and mod.relocs == mod4.relocs, src
+                else:
+                    assert len(mod4.sites) == 2 and 'dnm_ui_v1' in mod4.exports
+
+
+def test_digitone_native_machine_pages():
+    """A native-page descriptor needs the new companion, on OS 1.44 only."""
+    if not DN_STOCK_144 or not os.path.exists(DN_STOCK_144):
+        raise Skip('missing ELEKLOADER_DN_SYX_144')
+    tc = [x for x in devices.devices() if x.key == 'digitone-mk1'][0].toolchain
+    if not shutil.which(os.environ.get('ELEKLOADER_CROSS', tc['prefix']) + 'gcc'):
+        raise Skip('no m68k cross compiler')
+    with tempfile.TemporaryDirectory() as tmp:
+        core4, _c = build.build(os.path.join(ROOT, 'mods/core-dn1'), DN_STOCK_144, tmp)
+        companion, m = build.build(os.path.join(ROOT, 'mods/machines-dn1'), DN_STOCK_144, tmp)
+        assert len(m.sites) == 2 and {'dnm_ui_v1', 'dnm_names_v1'} <= set(m.exports)
+        assert {'dnm_sound_edit', 'dnm_syn_page', 'dnm_knob_value'} <= set(m.exports)
+        if CORE_DN411_REL and os.path.exists(CORE_DN411_REL):
+            baseline144 = CORE_DN411_REL.replace('.elemod', '-os1.44.elemod')
+            if os.path.exists(baseline144):
+                rc, report = lint_json(companion, '--stock', DN_STOCK_144, '--with', baseline144)
+                assert rc == 1 and any('needs core 4.2' in x for x in report['problems']), report['problems']
+        fixture = os.path.join(tmp, 'page')
+        os.mkdir(fixture)
+        with open(os.path.join(fixture, 'page.c'), 'w') as fh:
+            fh.write('#include "digitone-mk1/machines.h"\n'
+                     'static int32_t draw(void *v, void *b, int32_t s, int32_t p) {\n'
+                     '  int32_t locked; (void)b; (void)s; (void)p;\n'
+                     '  if (dnm_syn_page(v)) dnm_sound_edit(0, 0, 512);\n'
+                     '  return dnm_knob_value(0, &locked); }\n'
+                     '#include <stddef.h>\n'
+                     'typedef char machine_size[(sizeof(struct dnm_machine) == 28) ? 1 : -1];\n'
+                     'typedef char knob_size[(sizeof(struct dnm_knob) == 12) ? 1 : -1];\n'
+                     'typedef char voice_size[(sizeof(struct dnm_voice) == 20) ? 1 : -1];\n'
+                     'typedef char page_size[(sizeof(struct dnm_page) == 20) ? 1 : -1];\n'
+                     'typedef char names_size[(sizeof(struct dnm_names) == 16) ? 1 : -1];\n'
+                     'typedef char names_ptr[(offsetof(struct dnm_names, long_names) == 12) ? 1 : -1];\n'
+                     'const struct dnm_page page = {&dnm_ui_v1, 2, {1, 2}, draw};\n'
+                     'static const char *const labels[DNM_KNOBS] = {"Osc2 Coarse"};\n'
+                     'const struct dnm_names names = {&dnm_names_v1, 2, DNM_KNOBS, labels};\n')
+        doc = {'id': 'nativepage', 'version': '1.0', 'device': 'digitone-mk1',
+               'os': '1.44', 'sources': ['page.c'], 'requires': ['core', 'machines'],
+               'resources': {'core': '3.1'},
+               'contribute': [{'to': 'dn_machine_pages', 'data': '00000000',
+                               'relocs': [[0, 'abs32', 'sym:page', 0]]},
+                              {'to': 'dn_machine_names', 'data': '00000000',
+                               'relocs': [[0, 'abs32', 'sym:names', 0]]}]}
+        with open(os.path.join(fixture, 'mod.json'), 'w') as fh:
+            json.dump(doc, fh)
+        page, _p = build.build(fixture, DN_STOCK_144, tmp)
+        assert 'dnm_names_v1' in _p.imports
+        rc, report = lint_json(page, '--stock', DN_STOCK_144, '--with', core4, '--with', companion)
+        assert rc == 0, report['problems']
+        example, ex = build.build(os.path.join(ROOT, 'examples/dn-native-machine'), DN_STOCK_144, tmp)
+        assert not ex.sites and {'dnm_ui_v1', 'dnm_names_v1'} <= set(ex.imports)
+        rc, report = lint_json(example, '--stock', DN_STOCK_144, '--with', core4, '--with', companion)
+        assert rc == 0, report['problems']
+        old = os.path.join(tmp, 'old')
+        os.mkdir(old)
+        with open(os.path.join(old, 'old.c'), 'w') as fh:
+            fh.write('const int old_machine_api = 1;\n')
+        with open(os.path.join(old, 'mod.json'), 'w') as fh:
+            json.dump({'id': 'machines', 'version': '0.1', 'device': 'digitone-mk1',
+                       'os': '1.44', 'sources': ['old.c'], 'collections': {'dn_machines': 4},
+                       'requires': ['core'], 'resources': {'core': '3.1'}}, fh)
+        old_companion, _o = build.build(old, DN_STOCK_144, tmp)
+        rc, report = lint_json(page, '--stock', DN_STOCK_144, '--with', core4, '--with', old_companion)
+        assert rc == 1 and any('dnm_ui_v1' in problem or 'dn_machine_pages' in problem
+                              for problem in report['problems']), report['problems']
+
+        # Independently require the names marker; no page descriptor is involved.
+        names_doc = dict(doc, id='nativenames', contribute=[doc['contribute'][1]])
+        names_src = 'const struct dnm_names names = {&dnm_names_v1, 2, DNM_KNOBS, 0};\n'
+        with open(os.path.join(fixture, 'page.c'), 'w') as fh:
+            fh.write('#include "digitone-mk1/machines.h"\n' + names_src)
+        with open(os.path.join(fixture, 'mod.json'), 'w') as fh:
+            json.dump(names_doc, fh)
+        names_only, _n = build.build(fixture, DN_STOCK_144, tmp)
+        rc, report = lint_json(names_only, '--stock', DN_STOCK_144, '--with', core4, '--with', old_companion)
+        assert rc == 1 and any('dnm_names_v1' in x or 'dn_machine_names' in x
+                              for x in report['problems']), report['problems']
+        rc, report = lint_json(names_only, '--stock', DN_STOCK_144, '--with', core4, '--with', companion)
+        assert rc == 0, report['problems']
+        if DN_STOCK and formats.load(DN_STOCK)[2].version == '1.43':
+            names_doc['os'] = '1.43'
+            with open(os.path.join(fixture, 'mod.json'), 'w') as fh:
+                json.dump(names_doc, fh)
+            names143, _n = build.build(fixture, DN_STOCK, tmp)
+            machine143, m143 = build.build(os.path.join(ROOT, 'mods/machines-dn1'), DN_STOCK, tmp)
+            assert not m143.sites and 'dnm_names_v1' not in m143.exports
+            rc, report = lint_json(names143, '--stock', DN_STOCK, '--with', dn_core(tmp), '--with', machine143)
+            assert rc == 1 and any('dnm_names_v1' in x or 'dn_machine_names' in x
+                                  for x in report['problems']), report['problems']
 
 
 def test_digitone_exclusive_audio_example():
