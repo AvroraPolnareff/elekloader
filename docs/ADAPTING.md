@@ -1808,6 +1808,64 @@ stock edit or another sound reloads it. From the UI task.
 Core-dn1 3.1 owns two more sites: 0x4009e078 (`core_render_voices`, by jsr)
 and 0x400207b8 (`core_param_short`, by jmp).
 
+### Persistent Sound edits and held steps (core-dn1 4.2, Digitone mk1)
+
+On **OS1.44**, `core_sound_set(track, slot, value)` writes the active kit,
+updates live voices and notifies the native Sound reference to invalidate its
+packed cache. Track0-3, slot0-78, value8.8; UI task. Invalid track/slot or
+absent kit is a no-op. A missing project/reference leaves kit/live updated
+without notification. OS1.43 retains its kit/live implementation until that
+native notification path is measured. There is no separate `core_sound_edit`.
+
+`core_step_selection(steps)` snapshots held GRID/STEP indices into two32-bit
+words: steps0-31 in word0,32-63 in word1. Returns1 when nonempty, otherwise0
+and clears both words. The caller supplies a two-word array.
+`core_lock_selected(track, slot, value)` writes an absolute Sound-slot lock
+(value0-32767) to held steps of the native track returned by `fw_track_get`.
+It preserves note/lock trigs, creates a trig when needed and refreshes native
+UI. Return is a positive write count,0 for no selection,-1 for invalid
+context/no selected step within track length or allocation failure. On failure,
+earlier writes/trig creation may remain; it is not transactional. It never
+writes the base Sound. The caller owns defaults/FUNC, base fallback and its
+screen-dirty policy. Neither helper requires machines or a brain object.
+
+`fw_view_param_value(view, id, &locked_byte)` exports the native parameter-page
+display getter. It accepts a live native view and parameter ID, not a Sound
+slot. The output is a **non-null `uint8_t *`**. Native selection/Sound context
+determines the result, including mixed selections. It may allocate temporary
+native callback storage while held; it reports no DSP modulation and does
+not validate arbitrary/null views.
+
+Full names use the existing `core_param_override.name(id, field)` callback:
+`CORE_PARAM_LONG`0x28, `CORE_PARAM_GROUP`0x2c, `CORE_PARAM_SHORT`0x30.
+Return NULL to abstain, a string to override. The old two-pointer descriptor
+stays8 bytes; old short-name-only providers need no change.
+
+For value text and LFO visibility, contribute a pointer to
+`struct core_param_presenter` in `core_param_presenters`, with
+`abi = &core_param_present_v1`. `format(id,value,text)` returns1 when handled,
+0 to abstain; text holds at most15 characters plus NUL (`CORE_PARAM_TEXT=16`).
+`visible(id)` returns-1 to abstain,0 to hide,1 to show that original parameter
+ID in LFO DEST. Either callback may be NULL. Collection order decides the
+first non-abstaining answer; native behavior is the fallback. An incompatible
+layout requires another ABI marker. Callback text is borrowed only until the
+next call, UI task only. See [dn-param-presentation](../examples/dn-param-presentation)
+for a core-only provider.
+
+Core owns notification name/value and both LFOs' list/current label, choice
+filter and relative-step bridges. Filtering compacts only a fresh native UI
+vector; IDs/capacity and saved assignments are unchanged. Relative edits skip
+hidden targets; merely loading an old hidden destination does not rewrite it.
+Without providers these hooks use native labels/formatting/choices. Compact
+DEST uses short names; full-name overrides stay full in the list/notification.
+
+The SDK declares measured firmware bindings. Native bool results use D0.b
+(`uint8_t`); pointer-valued native results use D0 and `uint32_t`. String and
+choices constructors keep their native C++ hidden-result ABI for assembly.
+`fw_voice_pitch_processed` includes portamento/transpose, while raw pitch
+stays available. The new API/table/hooks exist only on OS1.44; importing them
+on OS1.43 is refused. No address relocation is assumed.
+
 ### Machines on the Digitone (machines, Digitone mk1)
 
 The `machines` mod (`mods/machines-dn1`) makes core-dn1 3.1's pieces into
