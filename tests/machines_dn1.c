@@ -60,7 +60,7 @@ static const struct dnm_knob knobs[16] = {
 };
 static const int16_t defaults[16] = {1234, -1, 100, -1};
 static const struct dnm_machine first = {6, "FIRST", 0, knobs, render, 0, defaults};
-static const struct dnm_machine legacy = {23, "LEGACY", 0, knobs, render, 0, 0};
+static const struct dnm_machine without_pages = {23, "NO PAGES", 0, knobs, render, 0, 0};
 static const struct dnm_machine second = {24, "SECOND", 0, knobs, render, 0, defaults};
 static const struct dnm_machine fallback = {25, "FALLBACK", 0, knobs, render, 0, defaults};
 static const struct dnm_knob extended_knobs[DNM_KNOBS_ALL] = {
@@ -72,7 +72,7 @@ static const int16_t extended_defaults[DNM_KNOBS_ALL] = {[0] = 100, [16] = 1234,
 static const struct dnm_machine extended = {26, "EXTENDED", 0, extended_knobs, render, DNM_PAGES2, extended_defaults};
 /* Same knobs, short names metadata: reads on page 2 must stop at count. */
 static const struct dnm_machine short_meta = {27, "SHORT META", 0, extended_knobs, render, DNM_PAGES2, 0};
-const struct dnm_machine *const dn_machines[] = {&first, &legacy, &second, &fallback, &extended, &short_meta, 0};
+const struct dnm_machine *const dn_machines[] = {&first, &without_pages, &second, &fallback, &extended, &short_meta, 0};
 static const struct dnm_page page1 = {&dnm_ui_v1, 6, {1, 1}, custom};
 static const struct dnm_page page2 = {&dnm_ui_v1, 24, {2, 0}, custom};
 static const struct dnm_page page3 = {&dnm_ui_v1, 25, {1, 1}, 0};
@@ -237,7 +237,7 @@ static void test_navigation(void)
     assert(dnm_machine_id() == 0);
     dnm_syn1_draw(views[0], 0);
     assert(stock_draws == old_stock + 2 && views[0][144 / 4] == 1);
-    puts("PASS native/custom/FM/legacy navigation, two pages and renderer fallback");
+    puts("PASS native/custom/FM/navigation without page descriptors, two pages and renderer fallback");
 }
 
 static void test_locks(void)
@@ -447,7 +447,7 @@ static void test_pages2_contract(void)
     assert(dnm_pages_enc(brain, event) == 1 && latest_slot == 39 && latest_value == 1024);
     func = 0;
     /* Upstream switch semantics: own second pages, restore when leaving,
-     * retain second-page values between two legacy machines. */
+     * retain second-page values between machines without page descriptors. */
     select_machine(0); machines_pick(0, 0, 0, 5);
     assert(FW_SOUND_SLOT(kit, 0, 35) == 1234);
     machines_pick(0, 0, 0, 1);
