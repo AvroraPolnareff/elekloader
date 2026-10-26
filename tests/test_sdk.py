@@ -613,7 +613,7 @@ def test_digitone_core_builds_and_links():
         assert sorted(dn['build']['sources']) == sorted(['audio.s', 'block.s', 'core.s', 'fw.s', 'leds.s',
                                                   'menu.s', 'midi.s', 'pages.s', 'params.s',
                                                   'projdata.s', 'queue.s', 'render.s', 'rows.s',
-                                                  'settings.s', 'voice.s', 'voices.s', 'native.s', 'sound.c', 'selection.c', 'param_names.c', 'param_names.s'])
+                                                  'settings.s', 'voice.s', 'voices.s', 'sound.c', 'selection.c', 'param_names.c', 'param_names.s'])
         assert dn['build']['sources']['core.s'] == dt['build']['sources']['core.s']
         placed = {k: v for k, v in dn['symbols'].items() if v[0] != 'abs'}
         shared = {k: v for k, v in placed.items() if k in dt['symbols']}
