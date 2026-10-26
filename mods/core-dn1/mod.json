@@ -321,7 +321,7 @@
     {"addr": "0x40100178", "stock": "4fefffec48d70c1c", "op": "jmp", "target": "core_note_queue"},
     {"addr": "0x40018332", "stock": "4eb9400e5f96", "op": "jsr", "target": "core_key_leds"},
     {"addr": "0x4009dba0", "stock": "4eb94009c078", "op": "jsr", "target": "core_render_params"},
-    {"addr": "0x400207b8", "stock": "4e56fffc222e000c", "op": "jmp", "target": "core_param_short"},
+    {"addr": "0x400207b8", "stock": "4e56fffc222e000c", "op": "jmp", "target": "core_param_short_native"},
     {"addr": "0x4000eb10", "stock": "4fefffd448d77cfc", "op": "jmp", "target": "core_proj_save"},
     {"addr": "0x400078e4", "stock": "0c80000000b6", "op": "bytes", "new": "0c80000000b9", "kind": "code"},
     {"addr": "0x40007908", "stock": "0c80000000b6", "op": "bytes", "new": "0c80000000b9", "kind": "code"},

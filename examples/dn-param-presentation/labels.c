@@ -1,4 +1,5 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
+#include <stddef.h>
 #include "digitone-mk1/core3.h"
 static const char *name(int32_t id, int32_t field)
 {
@@ -21,7 +22,9 @@ static int32_t format(int32_t id, int32_t value, char text[CORE_PARAM_TEXT])
 }
 static int32_t visible(int32_t id)
 { return id == (int32_t)fw_slot_ids[66] ? 1 : -1; }
-const struct core_param_override labels = {0, name};
-const struct core_param_presenter presentation = {&core_param_present_v1, format, visible};
+const struct core_param_presenter presentation = {&core_param_present_v2, name, format, visible};
 typedef char override_abi[(sizeof(struct core_param_override) == 8) ? 1 : -1];
-typedef char presenter_abi[(sizeof(struct core_param_presenter) == 12) ? 1 : -1];
+typedef char presenter_abi[(sizeof(struct core_param_presenter) == 16) ? 1 : -1];
+typedef char presenter_fields[(offsetof(struct core_param_presenter, name) == 4 &&
+    offsetof(struct core_param_presenter, format) == 8 &&
+    offsetof(struct core_param_presenter, visible) == 12) ? 1 : -1];

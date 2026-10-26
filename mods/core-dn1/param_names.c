@@ -3,7 +3,7 @@
 #ifdef CORE_NATIVE_UI
 extern const struct core_param_override *const core_param_override[];
 extern const struct core_param_presenter *const core_param_presenters[];
-const uint32_t core_param_present_v1 = 1;
+const uint32_t core_param_present_v2 = 2;
 static char value_text[CORE_PARAM_TEXT];
 /* Existing core_param_override callbacks return pointer bits in D0, as
  * core_param_short consumes them. GCC pointer calls would instead read A0. */
@@ -11,6 +11,15 @@ extern uint32_t core_param_name_call(uint32_t callback, int32_t id, int32_t fiel
 
 static const char *name_override(int32_t id, int32_t field)
 {
+    const struct core_param_presenter *const *provider;
+    for (provider = core_param_presenters; *provider; provider++) {
+        const struct core_param_presenter *p = *provider;
+        const char *text;
+        if (p->abi == &core_param_present_v2 && p->name &&
+            (text = p->name(id, field))) return text;
+    }
+    /* The original name callback only accepts SHORT, even when it ignores field. */
+    if (field != CORE_PARAM_SHORT) return 0;
     const struct core_param_override *const *p;
     for (p = core_param_override; *p; p++) {
         const char *text;
@@ -33,7 +42,7 @@ uint32_t core_param_value_text(int32_t id, int32_t value)
 {
     const struct core_param_presenter *const *p;
     for (p = core_param_presenters; *p; p++) {
-        if ((*p)->abi != &core_param_present_v1 || !(*p)->format) continue;
+        if ((*p)->abi != &core_param_present_v2 || !(*p)->format) continue;
         value_text[0] = value_text[CORE_PARAM_TEXT - 1] = 0;
         if ((*p)->format(id, value, value_text)) {
             value_text[CORE_PARAM_TEXT - 1] = 0;
@@ -48,7 +57,7 @@ int32_t core_param_dest_visible(int32_t id)
     const struct core_param_presenter *const *p;
     for (p = core_param_presenters; *p; p++) {
         int32_t answer;
-        if ((*p)->abi == &core_param_present_v1 && (*p)->visible &&
+        if ((*p)->abi == &core_param_present_v2 && (*p)->visible &&
             (answer = (*p)->visible(id)) >= 0) return answer != 0;
     }
     return 1;
@@ -93,11 +102,7 @@ int32_t core_param_lfo_step(uint32_t owner, int32_t id, int32_t proposed, int32_
 
 uint32_t core_param_lfo_name(int32_t offset, int32_t mode)
 {
-    int32_t id = offset / 60, field = mode == 1 ? CORE_PARAM_SHORT : CORE_PARAM_LONG;
-    const char *text;
-    if (id < 0 || id >= 185) id = 0;
-    text = name_override(id, field);
-    if (text) return (uint32_t)(uintptr_t)text;
-    return core_param_name(id, mode == 2 ? CORE_PARAM_SHORT : field);
+    /* mode 2 is the native list's width fallback, just like compact mode 1. */
+    return core_param_name(offset / 60, mode ? CORE_PARAM_SHORT : CORE_PARAM_LONG);
 }
 #endif

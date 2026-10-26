@@ -79,13 +79,15 @@ extern uint8_t *volatile fw_pattern;            /* 3.3: the active pattern's dat
 /* No OS1.43 exports until that native interface is measured. Importing one
  * requires core 4.2 and an implemented OS port. Invalid track/slot: no-op/0. */
 /* On OS1.44 core_sound_set also notifies the native SoundRef (persistent cache).
+ * On OS1.43 it only updates kit/live voices; resources.core=4.2 does not imply persistence.
  * The existing track/slot validation and UI-task contract still apply. */
 extern int32_t core_step_selection(uint32_t steps[2]); /* bits0..31 /32..63; clears outside GRID/STEP */
 /* Absolute Sound-slot lock on held steps of a native track (fw_track_get).
  * >0 writes, 0 no selection, -1 invalid/no eligible step/allocation failure.
- * No base fallback/default/FUNC/brain policy. Nontransactional on failure. */
+ * No base fallback/default/FUNC/brain policy. On failure prior writes/trigs remain,
+ * with no partial count. Retrying the same absolute edit reuses those trigs. */
 extern int32_t core_lock_selected(void *track, int32_t slot, int32_t value);
-extern void fw_sound_live(int32_t value, int32_t track, int32_t slot); /* low-level; core_sound_set is the persistent API */
+extern void fw_sound_live(int32_t value, int32_t track, int32_t slot); /* low-level; core_sound_set notifies SoundRef on OS1.44 only */
 /* Low-level firmware ABI. Pointer-valued results return in D0. */
 extern volatile int32_t fw_voice_pitch_processed[]; /* [voice 0-7], render IRQ: portamento/transpose pitch */
 extern uint32_t fw_project_get(void);          /* project accessor; distinct from fw_project storage pointer */
@@ -230,16 +232,19 @@ struct core_param_override {
     const char *(*name)(int32_t id, int32_t field);
 } __attribute__((aligned(4)));
 
-/* OS1.44: name callbacks may also answer LONG/GROUP, or return 0 for native.
- * Existing core_param_override stays 8 bytes. Optional presentation extensions
- * contribute pointers to core_param_presenters (first non-abstaining wins). */
+/* OS1.44: the 16-byte presentation descriptor handles LONG/GROUP/SHORT names,
+ * formatting and visibility. Each query walks core_param_presenters in collection
+ * order; the first answer wins independently for that query. Null callbacks abstain.
+ * A name miss falls back to the 8-byte core_param_override ONLY for SHORT, then
+ * to the native name. Old name callbacks are never called with LONG or GROUP. */
 #define CORE_PARAM_LONG 0x28
 #define CORE_PARAM_GROUP 0x2c
 #define CORE_PARAM_SHORT 0x30
 #define CORE_PARAM_TEXT 16
-extern const uint32_t core_param_present_v1;
+extern const uint32_t core_param_present_v2;
 struct core_param_presenter {
-    const uint32_t *abi; /* &core_param_present_v1; incompatible layouts need another marker */
+    const uint32_t *abi; /* &core_param_present_v2; incompatible layouts need another marker */
+    const char *(*name)(int32_t id, int32_t field); /* C pointer return; 0 abstains */
     int32_t (*format)(int32_t id, int32_t value, char text[CORE_PARAM_TEXT]); /* 1 handled; max15 chars+NUL; 0 fallback */
     int32_t (*visible)(int32_t id); /* parameter ID, -1 abstain, 0 hide in LFO DEST, 1 show */
 } __attribute__((aligned(4)));

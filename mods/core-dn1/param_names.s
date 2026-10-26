@@ -14,12 +14,13 @@ core_param_name_call:
 
 /* Native std::string long_name(set,id), hidden result in A0, D0 return.
  * Match4001fb92's callee-saved/allocator ABI and use the stock constructor. */
-        .globl core_param_long_name
-core_param_long_name:
+        .macro PARAM_NAME name,field
+        .globl \name
+\name:
         link.w %fp,#-4
         move.l %d2,-(%sp)
         move.l %a0,%d2
-        pea 0x28.w
+        pea \field
         move.l 12(%fp),-(%sp)
         jsr core_param_name
         addq.l #8,%sp
@@ -32,6 +33,10 @@ core_param_long_name:
         move.l -8(%fp),%d2
         unlk %fp
         rts
+
+        .endm
+        PARAM_NAME core_param_long_name,0x28.w
+        PARAM_NAME core_param_short_native,0x30.w
 
 /* Notification value call at40045674. FM retains the original formatter. */
         .globl core_param_notification_value

@@ -659,7 +659,7 @@ FW_DN42 = ['fw_sound_live', 'fw_voice_pitch_processed', 'fw_project_get', 'fw_so
            'fw_track_length', 'fw_track_has_note', 'fw_track_has_lock', 'fw_track_set_trig',
            'fw_track_set_lock', 'fw_ui_refresh', 'fw_syn_key', 'fw_syn1_draw', 'fw_syn2_draw',
            'fw_string_ctor', 'fw_param_value_text', 'fw_lfo_name_format', 'fw_lfo_choices']
-CORE_DN42 = ['core_lock_selected', 'core_param_dest_visible', 'core_param_lfo_choices', 'core_param_lfo_filter', 'core_param_lfo_knob_name', 'core_param_lfo_list_fallback', 'core_param_lfo_list_name', 'core_param_lfo_name', 'core_param_lfo_step', 'core_param_lfo_step_bridge', 'core_param_lfo_value_name', 'core_param_long_name', 'core_param_name', 'core_param_name_call', 'core_param_notification_value', 'core_param_present_v1', 'core_param_value_text', 'core_sound_apply', 'core_step_selection']
+CORE_DN42 = ['core_lock_selected', 'core_param_dest_visible', 'core_param_lfo_choices', 'core_param_lfo_filter', 'core_param_lfo_knob_name', 'core_param_lfo_list_fallback', 'core_param_lfo_list_name', 'core_param_lfo_name', 'core_param_lfo_step', 'core_param_lfo_step_bridge', 'core_param_lfo_value_name', 'core_param_long_name', 'core_param_name', 'core_param_name_call', 'core_param_short_native', 'core_param_notification_value', 'core_param_present_v2', 'core_param_value_text', 'core_sound_apply', 'core_step_selection']
 
 
 def dn42_exports(doc):
@@ -732,7 +732,12 @@ def test_digitone_core_4_2_preserves_4_1_1_with_sound_set_fix():
             native = after['target']['os'] == '1.44'
             for key in ('target', 'contribute', 'resources'):
                 assert after[key] == before[key], key
-            assert after['sites'][:len(before['sites'])] == before['sites']
+            expected_sites = json.loads(json.dumps(before['sites']))
+            if native:
+                short, = [site for site in expected_sites if site['addr'] == '0x400207b8']
+                assert short['relocs'] == [[2, 'abs32', 'sym:core_param_short', 0]]
+                short['relocs'] = [[2, 'abs32', 'sym:core_param_short_native', 0]]
+            assert after['sites'][:len(before['sites'])] == expected_sites
             assert len(after['sites']) == len(before['sites']) + (8 if native else 0)
             assert after['collections'] == dict(before['collections'], **({'core_param_presenters': {'entry': 4}} if native else {}))
             assert set(after['imports']) == set(before['imports']) | ({'core_param_presenters'} if native else set())
@@ -1537,7 +1542,11 @@ def test_digitone_core_port_to_144_is_the_same_core():
 
         def what(d):                # each site's new bytes and targets, not where it is
             return [(s['len'], s['kind'], s['new'], s.get('relocs')) for s in d['sites']]
-        assert len(new['sites']) == 96 and what(new)[:88] == what(old)
+        expected = json.loads(json.dumps(old))
+        short, = [site for site in expected['sites'] if site['addr'] == '0x400207b8']
+        assert short['relocs'] == [[2, 'abs32', 'sym:core_param_short', 0]]
+        short['relocs'] = [[2, 'abs32', 'sym:core_param_short_native', 0]]
+        assert len(new['sites']) == 96 and what(new)[:88] == what(expected)
         rc, r = lint_json(path, '--stock', DN_STOCK_144)
         assert rc == 0, r['problems']
         rc, r = lint_json(old_path, '--stock', DN_STOCK_144)
@@ -1552,7 +1561,13 @@ def test_digitone_core_parameter_presentation_without_machines():
         example, mod = build.build(os.path.join(ROOT, 'examples/dn-param-presentation'), DN_STOCK_144, tmp)
         assert not mod.sites and mod.needs_core == '4.2'
         assert set(mod.requires) == {'core'}
-        assert 'core_param_present_v1' in mod.imports
+        assert 'core_param_present_v2' in mod.imports
+        # An earlier 12-byte draft consumer must not link to this 16-byte ABI.
+        with open(example) as fh: prior_marker = fh.read().replace('core_param_present_v2', 'core_param_present_v1')
+        prior_example = os.path.join(tmp, 'prior-presenter.elemod')
+        with open(prior_example, 'w') as fh: fh.write(prior_marker)
+        rc, report = lint_json(prior_example, '--stock', DN_STOCK_144, '--with', core)
+        assert rc == 1 and any('core_param_present_v1' in x for x in report['problems']), report['problems']
         rc, report = lint_json(example, '--stock', DN_STOCK_144, '--with', core)
         assert rc == 0, report['problems']
         baseline = CORE_DN411_REL.replace('.elemod', '-os1.44.elemod')

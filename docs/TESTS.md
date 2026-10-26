@@ -59,8 +59,8 @@ python tests/test_core_dn1_sound.py
 
 Three independent fixtures compile the actual Sound, selection and
 presentation implementations without machines. They cover persistent
-notifications/bounds, both selection words and partial lock-write failure,
-legacy/extended providers, callback order and native fallbacks. Linux
+notifications/bounds, both selection words and partial lock-write failure/retry,
+SHORT-only callbacks/versioned providers, callback order and native fallbacks. Linux
 low-address non-PIE objects model native32-bit pointers; other platforms skip.
 Host fixtures do not establish ColdFire ABI, device timing or storage.
 
