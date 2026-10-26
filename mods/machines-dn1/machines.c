@@ -338,7 +338,11 @@ static const char *dnm_name(int32_t id, int32_t field)
 
 #endif
 
+#ifdef DNM_NATIVE_UI
+const struct core_param_override dnm_override = { dnm_ui, 0 };
+#else
 const struct core_param_override dnm_override = { dnm_ui, dnm_name };
+#endif
 
 #ifdef DNM_NATIVE_UI
 const struct dnm_machine *dnm_active(void)
@@ -372,7 +376,7 @@ static int32_t dnm_format_value(int32_t id, int32_t value, char text[CORE_PARAM_
     m->knobs[k].fmt(value, text);
     return 1;
 }
-const struct core_param_presenter dnm_presenter = {&core_param_present_v1, dnm_format_value, dnm_dest_visible};
+const struct core_param_presenter dnm_presenter = {&core_param_present_v2, dnm_name, dnm_format_value, dnm_dest_visible};
 
 #endif
 

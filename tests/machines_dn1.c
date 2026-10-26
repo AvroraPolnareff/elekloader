@@ -360,7 +360,8 @@ static void test_destination_metadata(void)
     select_machine(24);
     assert(!strcmp(dnm_ptr(dnm_param_name(107, 0x28)), "Osc2 Coarse"));
     assert(!strcmp(dnm_ptr(dnm_param_name(107, 0x30)), "A"));
-    assert(!strcmp(dnm_ptr(dnm_lfo_name(107 * 60, 2)), "Osc2 Coarse"));
+    assert(!strcmp(dnm_ptr(dnm_lfo_name(107 * 60, 0)), "Osc2 Coarse"));
+    assert(!strcmp(dnm_ptr(dnm_lfo_name(107 * 60, 2)), "A"));
     vector[0] = ptr(ids); vector[1] = ptr(ids + 10); vector[2] = vector[1];
     shared[0] = ptr(vector);
     dnm_lfo_filter(shared);
